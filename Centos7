@@ -1,0 +1,95 @@
+yum -y update
+  ? yum -y groupinstall development
+
+SETUP PYTHON3
+
+yum -y install https://centos7.iuscommunity.org/ius-release.rpm
+(yum install epel-release -y)
+yum -y install python36u python36u-pip python36u-devel
+ln -s /usr/bin/python3.6 /usr/bin/python3
+ln -s /usr/bin/pip3.6 /usr/bin/pip3
+
+yum -y install nano yum-utils gcc gcc-c++ kernel-devel libxslt-devel libffi-devel openssl-devel openldap-devel
+
+INSTALL wkhtmltopdf
+
+wget -O /tmp/wkhtmltox.rpm https://bitbucket.org/wkhtmltopdf/wkhtmltopdf/downloads/wkhtmltox-0.13.0-alpha-7b36694_linux-centos7-amd64.rpm && yum localinstall -y /tmp/wkhtmltox.rpm
+
+INSTALL NODEJS
+
+curl --silent --location https://rpm.nodesource.com/setup_0.10 | bash - && yum -y install nodejs && npm install -g less
+
+INSTALL ODOO11
+
+cd /opt
+git clone https://www.github.com/odoo/odoo --depth 1 --branch 11.0 --single-branch /opt/odoo
+pip3 install -r /opt/odoo/requirements.txt
+
+CREATE USER odoo
+
+groupadd odoo && adduser odoo --system -g odoo --home /opt/odoo
+
+
+MAKE CONFIG
+
+mkdir /var/log/odoo && mkdir /etc/odoo
+cp /opt/odoo/debian/odoo.conf /etc/odoo/odoo.conf
+nano /etc/odoo/odoo.conf
+
+[options]
+; This is the password that allows database operations:
+admin_passwd = admin
+db_host = 10.2.11.74
+db_port = 5432
+db_user = odoo11
+db_password = odoo11
+addons_path = /opt/odoo/addons
+;logfile = /var/log/odoo/odoo-server.log
+xmlrpc_port = 8069
+
+17. nano /lib/systemd/system/odoo.service
+
+[Unit]
+Description=Odoo Open Source ERP and CRM
+After=network.target
+
+[Service]
+Type=simple
+PermissionsStartOnly=true
+SyslogIdentifier=odoo
+User=odoo
+Group=odoo
+ExecStart=/opt/odoo/odoo-bin --config /etc/odoo/odoo.conf --logfile /var/log/odoo/odoo.log
+WorkingDirectory=/opt/odoo/
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
+
+MAKE RULE
+
+sudo chown -R odoo: /opt/odoo/
+sudo chown odoo:root /var/log/odoo
+sudo chown odoo: /etc/odoo/odoo.conf
+sudo chmod 640 /etc/odoo/odoo.conf
+
+MAKE REDIRECT TO 80 PORT
+
+iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8069
+iptables-save
+
+RUN SERVER
+
+systemctl enable odoo
+systemctl start odoo
+
+Fix UTF-8 postgres error:
+
+sudo su - postgres
+
+psql
+
+update pg_database set encoding = pg_char_to_encoding('UTF8');
+
+\q
+exit
